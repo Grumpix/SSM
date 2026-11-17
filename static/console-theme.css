@@ -1,0 +1,144 @@
+/* SSM / Quiet Console — one restrained visual system across all pages.
+   Loaded after legacy page styles by the shared header macro. */
+:root {
+    color-scheme: dark;
+    --bg-primary: #10161c;
+    --bg-secondary: #151d24;
+    --bg-card: #1a232b;
+    --border-subtle: #2a3741;
+    --border-active: #40515c;
+    --accent-blue: #86b4c8;
+    --accent-green: #77b99c;
+    --accent-red: #e18b8b;
+    --accent-yellow: #d6b47b;
+    --accent-purple: #a7a5c4;
+    --accent-cyan: #86b4c8;
+    --accent-orange: #d6a381;
+    --text-primary: #e6edf1;
+    --text-secondary: #aab9c3;
+    --text-muted: #8396a3;
+    --glow-blue: transparent;
+    --glow-green: transparent;
+    --glow-red: transparent;
+}
+
+body, button, input, select, textarea {
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+body {
+    background: var(--bg-primary);
+    background-image: none !important;
+    color: var(--text-primary);
+}
+code, pre, .font-mono, .terminal-container, .xterm {
+    font-family: "JetBrains Mono", ui-monospace, "SFMono-Regular", Consolas, monospace !important;
+}
+::selection { background: #36576a; color: #fff; }
+::-webkit-scrollbar-thumb { background: #394a55; }
+::-webkit-scrollbar-thumb:hover { background: #51636e; }
+
+/* Navigation: clear current location, little visual noise. */
+header.sticky, .ui-subheader { background: #171f26 !important; }
+.ui-subheader { box-shadow: none !important; }
+.ui-nav-pill, .ui-nav-tile {
+    background: transparent;
+    border-color: transparent;
+    border-radius: 6px;
+    font-weight: 500;
+}
+.ui-nav-pill:hover, .ui-nav-tile:hover { background: #24313b; }
+.ui-nav-pill.active, .ui-nav-tile.active, .ui-more-item.active {
+    background: #283a46;
+    border-color: #3c5562;
+    color: #c5e0eb;
+}
+.ui-more-dropdown-inner { border-radius: 8px; box-shadow: 0 12px 28px #080d1180; }
+.ui-brand-mark {
+    background: #243a46 !important;
+    box-shadow: none !important;
+    border: 1px solid #405563;
+    border-radius: 7px;
+}
+.ui-brand-name {
+    background: none !important;
+    -webkit-text-fill-color: var(--text-primary) !important;
+    color: var(--text-primary);
+    font-weight: 650;
+    letter-spacing: -.015em;
+}
+
+/* Legacy Tailwind gradient utilities occur in action buttons and decorative
+   headings across routes; replace both with simple, readable surfaces. */
+.bg-gradient-to-r, .bg-gradient-to-br, .bg-gradient-to-b {
+    background-image: none !important;
+}
+button.bg-gradient-to-r, a.bg-gradient-to-r {
+    background-color: #345b70 !important;
+    color: #eef8fc !important;
+}
+button.bg-gradient-to-r:hover, a.bg-gradient-to-r:hover {
+    background-color: #426e83 !important;
+}
+.bg-gradient-to-br { background-color: #29404d; }
+.bg-clip-text.text-transparent {
+    -webkit-text-fill-color: var(--text-primary) !important;
+    color: var(--text-primary) !important;
+}
+
+/* Data-first surfaces, consistent compact controls. */
+.panel-card, .status-card, .summary-card, .modal-card, .modal-box, .ui-modal-box,
+.ui-modal-card, .card-hover {
+    border-radius: 9px;
+    box-shadow: none !important;
+}
+.panel-card, .status-card, .summary-card { background: var(--bg-card); }
+.card-hover { transition: border-color 140ms ease, background-color 140ms ease; }
+.card-hover:hover {
+    transform: none !important;
+    border-color: var(--border-active);
+    box-shadow: none !important;
+}
+.btn, .refresh-btn, .ui-btn, .row-action-btn, .filter-tab, .search-input,
+.select-input, .text-input, .textarea-input, .ui-modal-input {
+    border-radius: 6px;
+    box-shadow: none !important;
+}
+.btn, .refresh-btn, .ui-btn, .filter-tab { font-weight: 550; }
+.btn-primary, .ui-btn-primary, .modal-actions .btn-primary {
+    background: #345b70;
+    color: #eef8fc;
+    border-color: #49758a;
+}
+.btn-primary:hover, .ui-btn-primary:hover, .modal-actions .btn-primary:hover {
+    background: #426e83;
+    color: #fff;
+}
+.filter-tab.active, .tab-button.active, .tab-btn.active {
+    color: #c5e0eb;
+    border-color: #587a8d;
+}
+.badge { border-radius: 4px; letter-spacing: .025em; }
+.status-card .value, .summary-value { letter-spacing: -.04em; font-weight: 650; }
+.search-input:focus, .ui-modal-input:focus, .select-input:focus, .text-input:focus,
+input:focus-visible, button:focus-visible, a:focus-visible {
+    outline: 2px solid #7195a7;
+    outline-offset: 2px;
+}
+
+/* Keep motion functional (loading spinners), avoid attention-grabbing effects. */
+.animate-fade-in, .animate-slide-up, .animate-slide-in-right, .status-running,
+.btn-glow, .row-flash { animation: none !important; }
+.btn-glow:hover { box-shadow: none !important; }
+.gradient-border::before { display: none !important; }
+
+/* Dashboard terminal: comfortable contrast without pure black and neon. */
+#terminal-pane { background: var(--bg-primary); }
+#terminal-pane section { border-radius: 9px; box-shadow: none !important; }
+#terminal-container, .terminal-container, .terminal-scroll { background: #10181f !important; }
+#terminal-tabs button { border-radius: 5px; }
+#terminal-tabs button:hover { background: #293843; }
+#resizer { background: #1d2932; }
+
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; }
+}
