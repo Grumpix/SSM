@@ -546,7 +546,7 @@
         </div>
         <div id="ui-nav-bar" class="hidden xl:flex items-center gap-1.5 flex-1 justify-center mx-4">
             {{ _ui_nav_primary(current) }}
-            {% set more_active = current in ['/control','/cron','/notifications','/disk','/cluster','/plugins','/config','/alerts','/packages','/backups','/firewall','/logs','/code'] %}
+            {% set more_active = current in ['/activity','/control','/cron','/notifications','/disk','/cluster','/plugins','/config','/alerts','/packages','/backups','/firewall','/logs','/code'] %}
             <div id="ui-nav-more" class="relative shrink-0">
                 <div id="ui-nav-more-pill" class="ui-nav-pill cursor-pointer select-none {{ 'active' if more_active else '' }}" onclick="uiToggleMore()" title="More pages">
                     <i data-lucide="chevron-down" class="w-4 h-4"></i>
@@ -687,12 +687,12 @@
 {# Renders the 7 primary nav items (always visible on desktop). #}
 {% macro _ui_nav_primary(current, mobile=False) %}
     {{ _ui_nav_item('/',                 'layout-dashboard', 'Dashboard',  current, mobile) }}
+    {{ _ui_nav_item('/services',         'layers-3',        'Services',   current, mobile) }}
     {{ _ui_nav_item('/monitor',          'activity',         'Monitor',    current, mobile) }}
     {{ _ui_nav_item('/system-services',  'server-cog',       'System',     current, mobile) }}
     {{ _ui_nav_item('/docker',           'container',        'Docker',     current, mobile) }}
     {{ _ui_nav_item('/ssh',              'key-round',        'SSH',        current, mobile) }}
     {{ _ui_nav_item('/files',            'folder-open',      'Files',      current, mobile) }}
-    {{ _ui_nav_item('/activity',         'history',          'Activity',   current, mobile) }}
 {% endmacro %}
 
 {# Renders a single dropdown item in the "More" menu (desktop only). #}
@@ -706,6 +706,7 @@
    or as tiles in the mobile slide-down menu. #}
 {% macro _ui_nav_more_items(current, mobile=False) %}
 {% set items = [
+    ('/activity', 'history', 'Activity'),
     ('/control', 'gamepad-2', 'Control'),
     ('/cron', 'calendar-clock', 'Cron'),
     ('/notifications', 'bell-ring', 'Health & Notifications'),
