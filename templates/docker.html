@@ -530,6 +530,7 @@
     let stateFilter = 'all';
     let livePaused = false;
     const selectedIds = new Set();
+    const containerActionsInProgress = new Map();
     // Rolling 60-point trend for the Stats tab (same fixed-window
     // pattern as /monitor: pre-filled nulls, spanGaps breaks the line).
     const TREND_N = 60;
@@ -828,6 +829,10 @@
             return;
         }
         tbody.innerHTML = filtered.map(c => {
+            const pending = containerActionsInProgress.get(c.full_id);
+            const actionIcon = action => pending === action
+                ? '<span class="spinner" aria-label="Working"></span>'
+                : `<i data-lucide="${action === 'start' ? 'play' : action === 'stop' ? 'square' : 'rotate-cw'}" class="w-3.5 h-3.5"></i>`;
             const stateClass = stateDotClass(c.state);
             const badgeClass = stateBadgeClass(c.state);
             const project = c.compose_project
@@ -846,14 +851,14 @@
                 </td>
                 <td class="font-mono text-xs truncate" title="${escAttr(c.ports)}">${portsHtml(c.ports)}</td>
                 <td class="text-right whitespace-nowrap">
-                    <button class="row-action-btn start" title="Start" onclick="event.stopPropagation(); lifecycleFor('${escAttr(c.full_id)}', 'start')" ${c.is_running ? 'disabled' : ''}>
-                        <i data-lucide="play" class="w-3.5 h-3.5"></i>
+                    <button class="row-action-btn start" title="Start" onclick="event.stopPropagation(); lifecycleFor('${escAttr(c.full_id)}', 'start')" ${c.is_running || pending ? 'disabled' : ''}>
+                        ${actionIcon('start')}
                     </button>
-                    <button class="row-action-btn stop" title="Stop" onclick="event.stopPropagation(); lifecycleFor('${escAttr(c.full_id)}', 'stop')" ${!c.is_running ? 'disabled' : ''}>
-                        <i data-lucide="square" class="w-3.5 h-3.5"></i>
+                    <button class="row-action-btn stop" title="Stop" onclick="event.stopPropagation(); lifecycleFor('${escAttr(c.full_id)}', 'stop')" ${!c.is_running || pending ? 'disabled' : ''}>
+                        ${actionIcon('stop')}
                     </button>
-                    <button class="row-action-btn restart" title="Restart" onclick="event.stopPropagation(); lifecycleFor('${escAttr(c.full_id)}', 'restart')">
-                        <i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i>
+                    <button class="row-action-btn restart" title="Restart" onclick="event.stopPropagation(); lifecycleFor('${escAttr(c.full_id)}', 'restart')" ${pending ? 'disabled' : ''}>
+                        ${actionIcon('restart')}
                     </button>
                 </td>
             </tr>`;
@@ -875,11 +880,7 @@
     }
 
     function lifecycleFor(id, action) {
-        const prev = selected;
-        selected = id;
-        return lifecycle(action).finally(() => {
-            selected = prev;
-        });
+        return lifecycle(action, id);
     }
 
     // ----- Detail panel -----
@@ -919,6 +920,7 @@
                 const running = data.is_running;
                 document.getElementById('btn-start').disabled = running;
                 document.getElementById('btn-stop').disabled = !running;
+                updateDetailActionButtons();
                 renderDetails();
             });
     }
@@ -1061,6 +1063,34 @@
     }
 
     // ----- Logs -----
+    const LOG_MAX_LINES = 2000;
+    const LOG_BATCH_SIZE = 200;
+    let logPending = [];
+    let logFlushTimer = null;
+    function flushLogLines() {
+        logFlushTimer = null;
+        if (!logPending.length) return;
+        const out = document.getElementById('log-output');
+        const fragment = document.createDocumentFragment();
+        // Drop stale lines under heavy output rather than blocking the UI.
+        const batch = logPending.splice(0, LOG_BATCH_SIZE);
+        for (const line of batch) {
+            const el = document.createElement('div');
+            el.className = 'log-line';
+            el.textContent = line;
+            fragment.appendChild(el);
+        }
+        out.appendChild(fragment);
+        const excess = out.childElementCount - LOG_MAX_LINES;
+        for (let i = 0; i < excess; i++) out.firstElementChild.remove();
+        if (document.getElementById('follow-tail').checked) out.scrollTop = out.scrollHeight;
+        if (logPending.length) logFlushTimer = setTimeout(flushLogLines, 50);
+    }
+    function enqueueLogLine(line) {
+        logPending.push(line);
+        if (logPending.length > LOG_MAX_LINES) logPending.splice(0, logPending.length - LOG_MAX_LINES);
+        if (logFlushTimer === null) logFlushTimer = setTimeout(flushLogLines, 50);
+    }
     function startLogStream() {
         stopLogStream();
         if (!selected) return;
@@ -1068,36 +1098,16 @@
         btn.textContent = 'Stop';
         const url = '/api/docker/containers/' + encodeURIComponent(selected) + '/logs/stream?tail=100';
         logEventSource = new EventSource(url);
-        const out = document.getElementById('log-output');
-        const follow = () => {
-            if (document.getElementById('follow-tail').checked) {
-                out.scrollTop = out.scrollHeight;
-            }
-        };
         logEventSource.onmessage = (e) => {
             try {
                 const payload = JSON.parse(e.data);
                 if (payload.ended) { stopLogStream(); return; }
                 if (payload.error) {
-                    const el = document.createElement('div');
-                    el.className = 'log-line text-[var(--accent-red)]';
-                    el.textContent = '[error] ' + payload.error;
-                    out.appendChild(el);
-                    follow();
+                    enqueueLogLine('[error] ' + payload.error);
                     return;
                 }
                 if (payload.line != null) {
-                    const el = document.createElement('div');
-                    el.className = 'log-line new';
-                    el.textContent = payload.line;
-                    out.appendChild(el);
-                    // Cap DOM growth on long streams (matches the
-                    // system-services log viewer's 5000-line trim).
-                    while (out.children.length > 5000) {
-                        out.removeChild(out.firstChild);
-                    }
-                    setTimeout(() => el.classList.remove('new'), 1200);
-                    follow();
+                    enqueueLogLine(payload.line);
                 }
             } catch (err) {
                 // ignore malformed
@@ -1110,6 +1120,8 @@
     }
     function stopLogStream() {
         if (logEventSource) { logEventSource.close(); logEventSource = null; }
+        logPending = [];
+        if (logFlushTimer !== null) { clearTimeout(logFlushTimer); logFlushTimer = null; }
         const btn = document.getElementById('btn-logs-toggle-label');
         if (btn) btn.textContent = 'Start';
     }
@@ -1118,17 +1130,46 @@
         else startLogStream();
     }
     function clearLogs() {
+        logPending = [];
+        if (logFlushTimer !== null) { clearTimeout(logFlushTimer); logFlushTimer = null; }
         document.getElementById('log-output').innerHTML = '';
     }
 
     // ----- Lifecycle -----
-    function lifecycle(action) {
-        if (!selected) return Promise.resolve();
-        return api('/api/docker/containers/' + encodeURIComponent(selected) + '/' + action, { method: 'POST' })
+    function updateDetailActionButtons() {
+        const pending = selected && containerActionsInProgress.get(selected);
+        for (const action of ['start', 'stop', 'restart']) {
+            const btn = document.getElementById('btn-' + action);
+            if (!btn) continue;
+            const defaultDisabled = action === 'start' ? Boolean(detail && detail.is_running)
+                : action === 'stop' ? Boolean(detail && !detail.is_running) : false;
+            btn.disabled = Boolean(pending) || defaultDisabled;
+            const icon = action === 'start' ? 'play' : action === 'stop' ? 'square' : 'rotate-cw';
+            btn.innerHTML = pending === action
+                ? `<span class="spinner" aria-hidden="true"></span> ${action === 'stop' ? 'Stopping' : action === 'start' ? 'Starting' : 'Restarting'}…`
+                : `<i data-lucide="${icon}" class="w-3.5 h-3.5"></i> ${action[0].toUpperCase() + action.slice(1)}`;
+        }
+        lucide.createIcons();
+    }
+    function lifecycle(action, id = selected) {
+        if (!id || containerActionsInProgress.has(id)) return Promise.resolve();
+        containerActionsInProgress.set(id, action);
+        renderRows();
+        if (selected === id) updateDetailActionButtons();
+        return api('/api/docker/containers/' + encodeURIComponent(id) + '/' + action, { method: 'POST' })
             .then(({ ok, data }) => {
                 if (!ok) { toast(data.error || 'Action failed', 'error'); return; }
-                toast(action + ' ok: ' + (data.output || selected), 'success');
-                setTimeout(loadContainers, 400);
+                toast(action + ' ok: ' + (data.output || id), 'success');
+            })
+            .catch(err => toast(err.message || 'Action failed', 'error'))
+            .finally(() => {
+                containerActionsInProgress.delete(id);
+                renderRows();
+                if (selected === id) {
+                    updateDetailActionButtons();
+                    loadDetail();
+                }
+                loadContainers();
             });
     }
     function confirmRemove() {
