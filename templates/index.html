@@ -36,7 +36,10 @@
             --glow-red: rgba(239, 68, 68, 0.15);
         }
 
-        * {
+        /* Do not apply a proportional font to xterm.js internal spans:
+           its renderer measures fixed-width cells and relies on matching
+           glyph metrics. A global * selector made words look spaced out. */
+        body, button, input, select, textarea {
             font-family: 'Space Grotesk', system-ui, sans-serif;
         }
 
