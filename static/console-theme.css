@@ -33,6 +33,15 @@ body {
 code, pre, .font-mono, .terminal-container, .xterm {
     font-family: "JetBrains Mono", ui-monospace, "SFMono-Regular", Consolas, monospace !important;
 }
+/* xterm.js measures a single monospace cell width and draws text in many
+   nested elements. All those elements must use the identical font metrics. */
+.xterm, .xterm * {
+    font-family: "JetBrains Mono", ui-monospace, "SFMono-Regular", Consolas, monospace !important;
+    font-variant-ligatures: none !important;
+    font-feature-settings: "liga" 0, "calt" 0 !important;
+    letter-spacing: 0 !important;
+    word-spacing: 0 !important;
+}
 ::selection { background: #36576a; color: #fff; }
 ::-webkit-scrollbar-thumb { background: #394a55; }
 ::-webkit-scrollbar-thumb:hover { background: #51636e; }
