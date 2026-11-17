@@ -46,9 +46,7 @@
 
         body {
             background: var(--bg-primary);
-            background-image: 
-                radial-gradient(ellipse at top left, rgba(59, 130, 246, 0.03) 0%, transparent 50%),
-                radial-gradient(ellipse at bottom right, rgba(139, 92, 246, 0.03) 0%, transparent 50%);
+            background-image: none;
         }
 
         /* Custom scrollbar */
@@ -319,7 +317,7 @@
                             </button>
                         </div>
                     </div>
-                    <div id="terminal-container" class="flex-1 bg-[#0a0a0f] relative">
+                    <div id="terminal-container" class="flex-1 bg-[#10181f] relative">
                         <div id="terminal-hint" class="absolute inset-0 flex items-center justify-center text-[var(--text-muted)] text-sm select-none pointer-events-none">
                             Click <span class="inline-flex items-center justify-center w-5 h-5 rounded bg-white/10 text-xs font-bold mx-1">+</span> to start a terminal
                         </div>
@@ -1550,11 +1548,11 @@
             // Initialize xterm
             const term = new Terminal({
                 theme: {
-                    background: '#0a0a0f',
-                    foreground: '#f1f5f9',
-                    cursor: '#3b82f6',
-                    selectionBackground: 'rgba(59, 130, 246, 0.3)',
-                    cursorAccent: '#0a0a0f'
+                    background: '#10181f',
+                    foreground: '#e6edf1',
+                    cursor: '#86b4c8',
+                    selectionBackground: 'rgba(134, 180, 200, 0.25)',
+                    cursorAccent: '#10181f'
                 },
                 fontFamily: '"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
                 fontSize: 13,
