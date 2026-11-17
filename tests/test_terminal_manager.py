@@ -36,7 +36,8 @@ class TestTerminalSession:
             sess.start()
             mock_exec.assert_called_once()
             args = mock_exec.call_args[0]
-            assert args[0] == "/bin/bash"
+            assert args[0] == "tmux"
+            assert args[1] == ["tmux", "new-session", "-A", "-s", "ssm-sess1"]
 
     def test_write_active(self, mock_socketio):
         sess = TerminalSession("s1", mock_socketio)
@@ -137,7 +138,8 @@ class TestTerminalSession:
 class TestTerminalManager:
     def test_create_session(self, mock_socketio):
         mgr = TerminalManager(mock_socketio)
-        with patch("app.terminal_manager.TerminalSession") as MockSess:
+        with patch("app.terminal_manager.TerminalSession") as MockSess, \
+             patch("app.terminal_manager.shutil.which", return_value="/usr/bin/tmux"):
             mock_inst = MagicMock()
             MockSess.return_value = mock_inst
             mgr.create_session("a")
@@ -147,7 +149,8 @@ class TestTerminalManager:
 
     def test_create_duplicate_noop(self, mock_socketio):
         mgr = TerminalManager(mock_socketio)
-        with patch("app.terminal_manager.TerminalSession") as MockSess:
+        with patch("app.terminal_manager.TerminalSession") as MockSess, \
+             patch("app.terminal_manager.shutil.which", return_value="/usr/bin/tmux"):
             mgr.sessions["a"] = MagicMock()
             mgr.create_session("a")
             MockSess.assert_not_called()

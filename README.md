@@ -80,7 +80,7 @@ Desktop browser recommended for real editing; phones get a "best on desktop" not
 ### UX
 - **Control Panel** — Steam Deck–style quick-action buttons for reboot, suspend, lock, disk/memory checks, and custom user-defined commands
 - **Command Palette** — Ctrl+K to fuzzy-search programs, control commands, and systemd units
-- **Web Terminal** — multi-tab PTY terminal that survives page navigation (stable ids + scrollback replay)
+- **Web Terminal** — named tmux-backed PTY tabs. New terminals automatically use tmux and survive browser closure or an SSM restart; existing sessions are rediscovered at login. Closing a tab detaches; the separate delete action terminates the session.
 - **File Explorer** — tree + list/grid, in-browser preview (text/image/pdf/audio/video), resumable uploads with pause/resume, downloads with progress + cancel, cut/copy/paste, zip, chmod (chrooted to `$HOME`)
 - **VS Code** — full code-server embedded on `/code`, with one-click jump from any file (needs `bash install-code-server.sh` once; desktop recommended)
 - **Plugin System** — drop a Python file into `~/.server-services-manager/plugins/` to add routes, programs, or background workers
@@ -109,6 +109,7 @@ Stop with `./stop.sh`.
 ## Requirements
 
 - **Python 3.10+** with `pip` (any generic Ubuntu: `sudo apt install python3 python3-pip python3-venv`)
+- **tmux** for persistent browser terminals (`sudo apt install tmux` on Debian/Ubuntu). The web terminal reports an error if tmux is missing.
 - **systemd user instance** — only needed for `install-service.sh` auto-start; `./start.sh` works without it
 - Everything else is optional and degrades gracefully:
   - Docker socket → `/docker` page (otherwise shows the exact fix command)

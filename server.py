@@ -10,7 +10,6 @@ import os
 import tempfile
 import time
 import threading
-import uuid
 import yaml
 
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, flash, Response, send_from_directory
@@ -183,7 +182,10 @@ def login():
         password = request.form.get('password') or ""
         if password and check_password_hash(_password_hash, password):
             session['logged_in'] = True
-            session['terminal_owner'] = uuid.uuid4().hex
+            # SSM currently has one shared administrator account. Keep its
+            # terminal identity stable across new logins and devices so
+            # active tmux sessions can be reattached without restarting SSM.
+            session['terminal_owner'] = 'ssm-admin'
             return redirect(url_for('index'))
         else:
             flash('Invalid password')
@@ -3697,7 +3699,7 @@ def handle_terminal_create(data):
     if not isinstance(data, dict):
         return
     session_id = data.get('id')
-    if isinstance(session_id, str) and 0 < len(session_id) <= 128:
+    if isinstance(session_id, str) and 0 < len(session_id) <= 64:
         owner = session['terminal_owner']
         if session_id in tm.sessions and not tm.belongs_to(session_id, owner):
             return
@@ -3706,7 +3708,11 @@ def handle_terminal_create(data):
         # instead of orphaning it. Replay missed output to the
         # requester only (room=request.sid, not broadcast).
         existed = tm.session_alive(session_id)
-        tm.create_session(session_id, owner=owner)
+        try:
+            tm.create_session(session_id, owner=owner)
+        except (ValueError, RuntimeError) as exc:
+            socketio.emit('terminal_error', {'id': session_id, 'message': str(exc)}, room=request.sid)
+            return
         join_room(f'terminal:{session_id}')
         if existed:
             backlog = tm.get_backlog(session_id)
@@ -3714,6 +3720,29 @@ def handle_terminal_create(data):
                 socketio.emit('terminal_backlog',
                               {'id': session_id, 'data': backlog},
                               room=request.sid)
+
+@socketio.on('terminal_list')
+def handle_terminal_list():
+    if not session.get('logged_in') or not session.get('terminal_owner'):
+        return
+    try:
+        ids = tm.list_sessions()
+        socketio.emit('terminal_sessions', {'ids': ids}, room=request.sid)
+    except RuntimeError as exc:
+        socketio.emit('terminal_error', {'message': str(exc)}, room=request.sid)
+
+@socketio.on('terminal_delete')
+def handle_terminal_delete(data):
+    if not session.get('logged_in') or not isinstance(data, dict):
+        return
+    session_id = data.get('id')
+    if not tm.belongs_to(session_id, session.get('terminal_owner')):
+        return
+    try:
+        tm.kill_session(session_id)
+    except ValueError:
+        return
+    leave_room(f'terminal:{session_id}')
 
 @socketio.on('terminal_input')
 def handle_terminal_input(data):
