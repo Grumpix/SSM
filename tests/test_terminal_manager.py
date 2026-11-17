@@ -107,7 +107,7 @@ class TestTerminalSession:
             assert sess.active is False
             assert sess.fd is None
             assert sess.pid is None
-            mock_socketio.emit.assert_called_with("terminal_closed", {"id": "s1"})
+            mock_socketio.emit.assert_called_with("terminal_closed", {"id": "s1"}, to="terminal:s1")
 
     def test_read_loop_emits(self, mock_socketio):
         sess = TerminalSession("s1", mock_socketio)
@@ -131,7 +131,7 @@ class TestTerminalSession:
             t.start()
             t.join(timeout=1)
             # should have emitted terminal_output
-            mock_socketio.emit.assert_any_call("terminal_output", {"id": "s1", "data": "hello"})
+            mock_socketio.emit.assert_any_call("terminal_output", {"id": "s1", "data": "hello"}, to="terminal:s1")
 
 
 class TestTerminalManager:

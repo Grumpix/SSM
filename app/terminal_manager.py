@@ -57,7 +57,7 @@ class TerminalSession:
                     self.socketio.emit('terminal_output', {
                         'id': self.id,
                         'data': text
-                    })
+                    }, to=f'terminal:{self.id}')
             except OSError:
                 break
             except Exception as e:
@@ -103,20 +103,26 @@ class TerminalSession:
                 pass
             self.pid = None
             
-        self.socketio.emit('terminal_closed', {'id': self.id})
+        self.socketio.emit('terminal_closed', {'id': self.id}, to=f'terminal:{self.id}')
 
 class TerminalManager:
     def __init__(self, socketio):
         self.socketio = socketio
         self.sessions: Dict[str, TerminalSession] = {}
+        self.owners: Dict[str, str] = {}
 
-    def create_session(self, session_id: str):
+    def create_session(self, session_id: str, owner: Optional[str] = None):
         if session_id in self.sessions:
             return
 
         session = TerminalSession(session_id, self.socketio)
         session.start()
         self.sessions[session_id] = session
+        if owner is not None:
+            self.owners[session_id] = owner
+
+    def belongs_to(self, session_id: str, owner: str) -> bool:
+        return bool(owner) and self.owners.get(session_id) == owner
 
     def session_alive(self, session_id: str) -> bool:
         """True if the session exists and its shell is still running."""
@@ -142,3 +148,4 @@ class TerminalManager:
         if session_id in self.sessions:
             self.sessions[session_id].close()
             del self.sessions[session_id]
+            self.owners.pop(session_id, None)

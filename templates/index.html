@@ -714,6 +714,10 @@
             if (!termsRestored) {
                 termsRestored = true;
                 restoreTerminals();
+            } else {
+                // Socket.IO rooms are per connection. Rejoin terminal rooms
+                // after a temporary network drop to resume private output.
+                Object.keys(terminals).forEach(id => socket.emit('terminal_create', { id }));
             }
         });
 

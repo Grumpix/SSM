@@ -10,10 +10,11 @@ import os
 import tempfile
 import time
 import threading
+import uuid
 import yaml
 
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, flash, Response, send_from_directory
-from flask_socketio import SocketIO
+from flask_socketio import SocketIO, join_room, leave_room, disconnect
 from app.process_manager import ProcessManager, ProgramConfig, ProgramStatus
 from app.terminal_manager import TerminalManager
 from app import system_services
@@ -65,7 +66,8 @@ app.config['SESSION_COOKIE_HTTPONLY'] = True
 @app.errorhandler(413)
 def _too_large(error):
     return jsonify({"error": "upload too large (cap 1GB per file)", "code": "too_large"}), 413
-socketio = SocketIO(app, cors_allowed_origins=os.getenv('CORS_ORIGIN', '*'), max_http_buffer_size=10*1024*1024)
+# Same-origin by default; explicitly configure CORS_ORIGIN for a trusted proxy origin.
+socketio = SocketIO(app, cors_allowed_origins=os.getenv('CORS_ORIGIN') or None, max_http_buffer_size=10*1024*1024)
 
 
 # State-change hook for managed programs. Defined at module level
@@ -181,6 +183,7 @@ def login():
         password = request.form.get('password') or ""
         if password and check_password_hash(_password_hash, password):
             session['logged_in'] = True
+            session['terminal_owner'] = uuid.uuid4().hex
             return redirect(url_for('index'))
         else:
             flash('Invalid password')
@@ -3681,19 +3684,30 @@ def background_thread():
 
 @socketio.on('connect')
 def test_connect():
+    if not session.get('logged_in') or not session.get('terminal_owner'):
+        return False
     logger.info('Client connected')
 
 # Terminal Events
 @socketio.on('terminal_create')
 def handle_terminal_create(data):
+    if not session.get('logged_in') or not session.get('terminal_owner'):
+        disconnect()
+        return
+    if not isinstance(data, dict):
+        return
     session_id = data.get('id')
-    if session_id:
+    if isinstance(session_id, str) and 0 < len(session_id) <= 128:
+        owner = session['terminal_owner']
+        if session_id in tm.sessions and not tm.belongs_to(session_id, owner):
+            return
         # create_session() is a no-op for a live id, so a client that
         # navigated away and back reattaches to the same running shell
         # instead of orphaning it. Replay missed output to the
         # requester only (room=request.sid, not broadcast).
         existed = tm.session_alive(session_id)
-        tm.create_session(session_id)
+        tm.create_session(session_id, owner=owner)
+        join_room(f'terminal:{session_id}')
         if existed:
             backlog = tm.get_backlog(session_id)
             if backlog:
@@ -3703,24 +3717,31 @@ def handle_terminal_create(data):
 
 @socketio.on('terminal_input')
 def handle_terminal_input(data):
+    if not session.get('logged_in') or not isinstance(data, dict):
+        return
     session_id = data.get('id')
     input_data = data.get('data')
-    if session_id and input_data:
+    if tm.belongs_to(session_id, session.get('terminal_owner')) and isinstance(input_data, str) and input_data:
         tm.write(session_id, input_data)
 
 @socketio.on('terminal_resize')
 def handle_terminal_resize(data):
+    if not session.get('logged_in') or not isinstance(data, dict):
+        return
     session_id = data.get('id')
     cols = data.get('cols')
     rows = data.get('rows')
-    if session_id and cols and rows:
+    if tm.belongs_to(session_id, session.get('terminal_owner')) and isinstance(cols, int) and isinstance(rows, int) and 0 < cols <= 1000 and 0 < rows <= 1000:
         tm.resize(session_id, cols, rows)
 
 @socketio.on('terminal_close')
 def handle_terminal_close(data):
+    if not session.get('logged_in') or not isinstance(data, dict):
+        return
     session_id = data.get('id')
-    if session_id:
+    if tm.belongs_to(session_id, session.get('terminal_owner')):
         tm.close(session_id)
+        leave_room(f'terminal:{session_id}')
 
 # Note: log streaming is delivered via Server-Sent Events at
 # /api/system-services/<name>/logs/stream. No socketio event handlers
