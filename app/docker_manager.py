@@ -239,20 +239,30 @@ def stream_logs(id_or_name: str, tail: int = 100):
 
     def gen():
         # ``stream=True`` makes logs() an iterator. follow=True keeps
-        # tailing until the consumer breaks out.
+        # tailing until the consumer breaks out. SDK chunks are arbitrary
+        # byte fragments, not guaranteed to contain whole log lines.
+        import codecs
+        decoder = codecs.getincrementaldecoder("utf-8")("replace")
+        pending = ""
         try:
             stream = c.logs(stream=True, follow=True, tail=tail, timestamps=False)
             for chunk in stream:
-                try:
-                    text = chunk.decode("utf-8", errors="replace")
-                except Exception:  # noqa: BLE001
-                    continue
-                for line in text.splitlines():
+                pending += decoder.decode(chunk)
+                while "\n" in pending:
+                    line, pending = pending.split("\n", 1)
+                    line = line.rstrip("\r")
                     if line:
                         yield line
+                # A broken/no-newline producer must not grow RAM forever.
+                if len(pending) > 65536:
+                    yield pending[:65536]
+                    pending = pending[65536:]
         except Exception as e:  # noqa: BLE001
             # The stream breaks when the container stops; that's normal.
             logger.debug(f"log stream for {id_or_name} ended: {e}")
+        pending += decoder.decode(b"", final=True)
+        if pending:
+            yield pending.rstrip("\r")
 
     return gen()
 

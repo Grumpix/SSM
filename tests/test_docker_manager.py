@@ -382,6 +382,29 @@ def test_get_logs_not_found(monkeypatch):
     assert exc_info.value.code == "not_found"
 
 
+def test_stream_logs_reassembles_arbitrary_chunks():
+    """Docker SDK may yield individual bytes; only LF ends a log line."""
+    fake = MagicMock()
+    text = "KidsMC is ready 🟢\r\nSecond line\nLast partial"
+    payload = text.encode("utf-8")
+    fake.logs.return_value = iter(bytes([b]) for b in payload)
+    client = MagicMock()
+    client.containers.get.return_value = fake
+    with patch.object(docker_manager, "_client", return_value=client):
+        lines = list(docker_manager.stream_logs("KidsMC"))
+    assert lines == ["KidsMC is ready 🟢", "Second line", "Last partial"]
+    fake.logs.assert_called_with(stream=True, follow=True, tail=100, timestamps=False)
+
+
+def test_stream_logs_handles_split_chunks():
+    fake = MagicMock()
+    fake.logs.return_value = iter([b"hello wor", b"ld\nnext", b" log\r\n"])
+    client = MagicMock()
+    client.containers.get.return_value = fake
+    with patch.object(docker_manager, "_client", return_value=client):
+        assert list(docker_manager.stream_logs("web")) == ["hello world", "next log"]
+
+
 # ---------------------------------------------------------------------------
 # get_stats
 # ---------------------------------------------------------------------------
