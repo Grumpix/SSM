@@ -289,7 +289,8 @@ breaking the manager. See `app/plugins.py` for the full API.
 
 | Route | Page | Description |
 |-------|------|-------------|
-| `/` | Dashboard | Manage services, view logs, multi-tab terminal |
+| `/` | Dashboard | Live host overview and persistent tmux terminal workspace |
+| `/services` | Services | Manage custom programs, auto-restart, limits and service logs |
 | `/monitor` | System Monitor | Real-time CPU/Memory/Network charts, processes |
 | `/control` | Control Panel | Quick system commands |
 | `/system-services` | System Services | Browse, control, and edit any systemd unit on the host |

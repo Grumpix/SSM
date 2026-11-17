@@ -204,7 +204,12 @@ def favicon():
 
 @app.route('/')
 def index():
-    return render_template('index.html')
+    return render_template('index.html', services_page=False)
+
+@app.route('/services')
+def services_page():
+    """Manage user-defined programs separately from the terminal workspace."""
+    return render_template('index.html', services_page=True)
 
 @app.route('/monitor')
 def monitor():
