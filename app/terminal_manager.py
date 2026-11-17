@@ -22,6 +22,10 @@ logger = logging.getLogger("TerminalManager")
 _SCROLLBACK_CHUNKS = 200
 _TMUX_PREFIX = "ssm-"
 _SESSION_ID = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
+# xterm.js answers terminal capability probes automatically. When an old
+# tmux client's delayed probe reaches a newly attached browser, the reply can
+# otherwise be echoed into the interactive shell as literal ^[[?...c text.
+_DEVICE_ATTRIBUTES = re.compile(r"\x1b\[(?:\?[0-9;]*|>[0-9;]*)c")
 
 class TerminalSession:
     def __init__(self, session_id: str, socketio, cmd: str = "/bin/bash"):
@@ -117,6 +121,25 @@ class TerminalManager:
         self.socketio = socketio
         self.sessions: Dict[str, TerminalSession] = {}
         self.owners: Dict[str, str] = {}
+        # Socket.IO subscriptions, not browser tabs, own the ephemeral PTY
+        # attachment. The tmux session itself has an independent lifetime.
+        self.subscribers: Dict[str, set[str]] = {}
+
+    def subscribe(self, session_id: str, socket_sid: str):
+        if session_id in self.sessions:
+            self.subscribers.setdefault(session_id, set()).add(socket_sid)
+
+    def unsubscribe(self, session_id: str, socket_sid: str):
+        clients = self.subscribers.get(session_id)
+        if clients is None:
+            return
+        clients.discard(socket_sid)
+        if not clients:
+            self.close(session_id)
+
+    def unsubscribe_client(self, socket_sid: str):
+        for session_id in list(self.subscribers):
+            self.unsubscribe(session_id, socket_sid)
 
     def create_session(self, session_id: str, owner: Optional[str] = None):
         if not isinstance(session_id, str) or not _SESSION_ID.fullmatch(session_id):
@@ -179,7 +202,9 @@ class TerminalManager:
 
     def write(self, session_id: str, data: str):
         if session_id in self.sessions:
-            self.sessions[session_id].write(data)
+            filtered = _DEVICE_ATTRIBUTES.sub("", data)
+            if filtered:
+                self.sessions[session_id].write(filtered)
 
     def resize(self, session_id: str, cols: int, rows: int):
         if session_id in self.sessions:
@@ -190,3 +215,4 @@ class TerminalManager:
             self.sessions[session_id].close()
             del self.sessions[session_id]
             self.owners.pop(session_id, None)
+        self.subscribers.pop(session_id, None)
