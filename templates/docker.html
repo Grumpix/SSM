@@ -298,6 +298,12 @@
         </button>
         <span id="view-count" class="text-xs text-[var(--text-muted)] font-mono"></span>
         <span class="flex-1"></span>
+        <a id="dockge-link" class="btn" href="#" target="_blank" rel="noopener noreferrer" title="Open Dockge Compose editor in a new tab">
+            <i data-lucide="external-link" class="w-3.5 h-3.5"></i> Dockge
+        </a>
+        <button class="btn" onclick="configureDockge()" title="Set Dockge URL" aria-label="Configure Dockge URL">
+            <i data-lucide="settings-2" class="w-3.5 h-3.5"></i>
+        </button>
         <label class="flex items-center gap-2 text-xs text-[var(--text-secondary)] cursor-pointer">
             <input id="filter-all" type="checkbox" checked onchange="loadContainers()"
                    class="rounded border-[var(--border-subtle)]">
@@ -531,6 +537,30 @@
     let livePaused = false;
     const selectedIds = new Set();
     const containerActionsInProgress = new Map();
+    // Only a shortcut: Dockge remains an independent service. Saved per browser.
+    const DOCKGE_URL_KEY = 'ssm-dockge-url';
+    function dockgeUrl() {
+        return localStorage.getItem(DOCKGE_URL_KEY) || `http://${location.hostname}:5001`;
+    }
+    function refreshDockgeLink() {
+        const link = document.getElementById('dockge-link');
+        link.href = dockgeUrl();
+        link.title = `Open Dockge: ${dockgeUrl()} (new tab)`;
+    }
+    function configureDockge() {
+        const value = prompt('Dockge URL (http:// or https://):', dockgeUrl());
+        if (value === null) return;
+        try {
+            const url = new URL(value.trim());
+            if (!['http:', 'https:'].includes(url.protocol) || !url.hostname || url.username || url.password) throw Error();
+            localStorage.setItem(DOCKGE_URL_KEY, url.href);
+            refreshDockgeLink();
+            toast('Dockge link updated', 'success');
+        } catch (_) {
+            toast('Enter a valid http:// or https:// address', 'error');
+        }
+    }
+    refreshDockgeLink();
     // Rolling 60-point trend for the Stats tab (same fixed-window
     // pattern as /monitor: pre-filled nulls, spanGaps breaks the line).
     const TREND_N = 60;
