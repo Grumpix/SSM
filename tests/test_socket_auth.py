@@ -85,3 +85,19 @@ def test_terminal_output_only_reaches_joined_owner(socket_app):
     assert not any(event["name"] == "terminal_output" for event in bob.get_received())
     alice.disconnect()
     bob.disconnect()
+
+
+def test_relogin_can_discover_and_reattach_tmux_sessions(socket_app):
+    app, socketio, tm, create, *_ = socket_app
+    # A fresh browser login for the same SSM administrator has no
+    # sessionStorage; the server still lists the persistent tmux sessions.
+    browser = _logged_in(app, socketio, "ssm-admin")
+    with patch.object(tm, "list_sessions", return_value=["minecraft", "build"]):
+        browser.emit("terminal_list")
+    received = browser.get_received()
+    assert any(event["name"] == "terminal_sessions" and
+               event["args"][0]["ids"] == ["minecraft", "build"]
+               for event in received)
+    browser.emit("terminal_create", {"id": "minecraft"})
+    create.assert_called_once_with("minecraft", owner="ssm-admin")
+    browser.disconnect()

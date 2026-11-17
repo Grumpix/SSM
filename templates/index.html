@@ -711,14 +711,24 @@
             // Reattach tabs from before a route change (once per page
             // load). Server-side the shells never died: create is
             // idempotent and replays missed output via backlog.
-            if (!termsRestored) {
-                termsRestored = true;
-                restoreTerminals();
-            } else {
+            if (termsRestored) {
                 // Socket.IO rooms are per connection. Rejoin terminal rooms
                 // after a temporary network drop to resume private output.
                 Object.keys(terminals).forEach(id => socket.emit('terminal_create', { id }));
             }
+            termsRestored = true;
+            socket.emit('terminal_list');
+        });
+
+        socket.on('terminal_sessions', msg => {
+            (msg.ids || []).forEach(id => {
+                if (!terminals[id]) attachTerminal(id, id.replaceAll('-', ' '));
+            });
+        });
+
+        socket.on('terminal_error', msg => {
+            toast(msg.message || 'Unable to open terminal', 'error');
+            if (msg.id && terminals[msg.id]) removeTerminal(msg.id);
         });
 
         socket.on('disconnect', () => {
@@ -1494,30 +1504,20 @@
     <script>
         // Terminal Logic
 
-        // Open tab ids survive route changes in this tab (sessionStorage):
-        // the shell keeps running server-side, and re-emitting
-        // terminal_create reattaches (idempotent) with backlog replay.
-        function saveTermIds() {
-            try {
-                sessionStorage.setItem('ssm-terminals',
-                    JSON.stringify(Object.keys(terminals).slice(-10)));
-            } catch (e) { /* private mode */ }
-        }
-        function restoreTerminals() {
-            let ids = [];
-            try { ids = JSON.parse(sessionStorage.getItem('ssm-terminals') || '[]'); } catch (e) {}
-            ids.filter(id => typeof id === 'string' && !terminals[id]).forEach(id => {
-                terminalCount++;
-                attachTerminal(id, `Terminal ${terminalCount}`);
-            });
-        }
+        // Server-side tmux is the source of truth: sessions are discovered
+        // via terminal_list after login, even from a different browser.
 
         function createNewTerminal() {
             terminalCount++;
-            const id = `term-${Date.now()}`;
-            const name = `Terminal ${terminalCount}`;
-            attachTerminal(id, name);
-            saveTermIds();
+            const entered = prompt('Terminal name (letters, digits, - or _):', `terminal-${terminalCount}`);
+            if (entered === null) return;
+            const id = entered.trim();
+            if (!/^[a-zA-Z0-9_-]{1,64}$/.test(id)) {
+                toast('Use 1–64 letters, numbers, underscores or hyphens', 'error');
+                return;
+            }
+            if (terminals[id]) { switchTab(id); return; }
+            attachTerminal(id, id);
         }
 
         function attachTerminal(id, name) {
@@ -1532,8 +1532,11 @@
                     <i data-lucide="terminal" class="w-3 h-3 text-[var(--accent-purple)]"></i>
                 </div>
                 <span>${name}</span>
-                <span onclick="event.stopPropagation(); closeTerminal('${id}')" class="ml-1 p-0.5 rounded-md hover:text-[var(--accent-red)] hover:bg-[var(--accent-red)]/10 transition-all">
+                <span onclick="event.stopPropagation(); closeTerminal('${id}')" title="Detach (keeps running)" class="ml-1 p-0.5 rounded-md hover:text-[var(--accent-red)] hover:bg-[var(--accent-red)]/10 transition-all">
                     <i data-lucide="x" class="w-3 h-3"></i>
+                </span>
+                <span onclick="event.stopPropagation(); deleteTerminal('${id}')" title="Terminate persistent session" class="ml-1 p-0.5 rounded-md hover:text-[var(--accent-red)] hover:bg-[var(--accent-red)]/10 transition-all">
+                    <i data-lucide="trash-2" class="w-3 h-3"></i>
                 </span>
             `;
             document.getElementById('terminal-tabs').appendChild(tab);
@@ -1629,6 +1632,12 @@
             removeTerminal(id);
         }
 
+        function deleteTerminal(id) {
+            if (!confirm(`Permanently terminate terminal "${id}" and its running processes?`)) return;
+            socket.emit('terminal_delete', { id });
+            removeTerminal(id);
+        }
+
         function removeTerminal(id) {
             const session = terminals[id];
             if (!session) return;
@@ -1639,7 +1648,6 @@
             session.term.dispose();
 
             delete terminals[id];
-            saveTermIds();
 
             if (activeTerminalId === id) {
                 activeTerminalId = null;

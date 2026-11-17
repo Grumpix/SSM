@@ -9,6 +9,8 @@ import signal
 import fcntl
 import termios
 import struct
+import shutil
+import re
 from collections import deque
 from typing import Dict, Optional
 
@@ -18,6 +20,8 @@ logger = logging.getLogger("TerminalManager")
 # comes back (reattach by stable id) sees what it missed instead of
 # a blank tab. Bounded: 200 chunks ≈ 800 KB worst case per session.
 _SCROLLBACK_CHUNKS = 200
+_TMUX_PREFIX = "ssm-"
+_SESSION_ID = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
 
 class TerminalSession:
     def __init__(self, session_id: str, socketio, cmd: str = "/bin/bash"):
@@ -37,7 +41,10 @@ class TerminalSession:
             env = os.environ.copy()
             env["TERM"] = "xterm-256color"
             os.chdir(os.path.expanduser('~'))
-            os.execvpe(self.cmd, [self.cmd], env)
+            # tmux owns the real shell, so it survives web disconnects and
+            # restarts of this Python process. This PTY is only a client.
+            os.execvpe("tmux", ["tmux", "new-session", "-A", "-s",
+                                _TMUX_PREFIX + self.id], env)
         else:
             self.active = True
             self.thread = threading.Thread(target=self._read_loop, daemon=True)
@@ -112,14 +119,48 @@ class TerminalManager:
         self.owners: Dict[str, str] = {}
 
     def create_session(self, session_id: str, owner: Optional[str] = None):
+        if not isinstance(session_id, str) or not _SESSION_ID.fullmatch(session_id):
+            raise ValueError("Invalid terminal session name")
+        if not shutil.which("tmux"):
+            raise RuntimeError("tmux is not installed (apt install tmux)")
         if session_id in self.sessions:
-            return
+            if self.session_alive(session_id):
+                return
+            # A dead tmux client must not prevent attaching again.
+            self.sessions.pop(session_id, None)
+            self.owners.pop(session_id, None)
 
         session = TerminalSession(session_id, self.socketio)
         session.start()
         self.sessions[session_id] = session
         if owner is not None:
             self.owners[session_id] = owner
+
+    def list_sessions(self) -> list[str]:
+        """Discover surviving tmux sessions, even after a manager restart."""
+        if not shutil.which("tmux"):
+            raise RuntimeError("tmux is not installed (apt install tmux)")
+        result = subprocess.run(
+            ["tmux", "list-sessions", "-F", "#{session_name}"],
+            capture_output=True, text=True, timeout=5, check=False,
+        )
+        if result.returncode:
+            # tmux returns nonzero when its server has no sessions.
+            if any(marker in result.stderr.lower() for marker in
+                   ("no server running", "error connecting", "failed to connect to server")):
+                return []
+            raise RuntimeError("Could not list tmux sessions")
+        return sorted(name[len(_TMUX_PREFIX):] for name in result.stdout.splitlines()
+                      if name.startswith(_TMUX_PREFIX)
+                      and _SESSION_ID.fullmatch(name[len(_TMUX_PREFIX):]))
+
+    def kill_session(self, session_id: str):
+        """Explicitly terminate a persistent session (closing a tab never does)."""
+        if not isinstance(session_id, str) or not _SESSION_ID.fullmatch(session_id):
+            raise ValueError("Invalid terminal session name")
+        self.close(session_id)
+        subprocess.run(["tmux", "kill-session", "-t", "=" + _TMUX_PREFIX + session_id],
+                       capture_output=True, timeout=5, check=False)
 
     def belongs_to(self, session_id: str, owner: str) -> bool:
         return bool(owner) and self.owners.get(session_id) == owner
