@@ -3690,6 +3690,12 @@ def test_connect():
         return False
     logger.info('Client connected')
 
+@socketio.on('disconnect')
+def handle_socket_disconnect(reason=None):
+    # Browser closure drops its PTY attachment. tmux continues running,
+    # and the next browser connection attaches a fresh tmux client.
+    tm.unsubscribe_client(request.sid)
+
 # Terminal Events
 @socketio.on('terminal_create')
 def handle_terminal_create(data):
@@ -3714,6 +3720,7 @@ def handle_terminal_create(data):
             socketio.emit('terminal_error', {'id': session_id, 'message': str(exc)}, room=request.sid)
             return
         join_room(f'terminal:{session_id}')
+        tm.subscribe(session_id, request.sid)
         if existed:
             backlog = tm.get_backlog(session_id)
             if backlog:
@@ -3769,8 +3776,8 @@ def handle_terminal_close(data):
         return
     session_id = data.get('id')
     if tm.belongs_to(session_id, session.get('terminal_owner')):
-        tm.close(session_id)
         leave_room(f'terminal:{session_id}')
+        tm.unsubscribe(session_id, request.sid)
 
 # Note: log streaming is delivered via Server-Sent Events at
 # /api/system-services/<name>/logs/stream. No socketio event handlers
